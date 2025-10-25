@@ -10,6 +10,14 @@ from app.utils.exceptions import (
     ValidationException,
     ImageNotFoundException
 )
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -62,6 +70,7 @@ async def validation_exception_handler(request: Request, exc: ValidationExceptio
 
 @app.exception_handler(ExternalAPIException)
 async def external_api_exception_handler(request: Request, exc: ExternalAPIException):
+    logger.error(f"External API error: {exc.message} (API: {exc.api_name})")
     return JSONResponse(
         status_code=503,
         content={
