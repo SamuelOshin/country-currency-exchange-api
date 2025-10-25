@@ -5,6 +5,8 @@ import os
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
+    SSL_CERT_PATH: Optional[str] = "ca.pem"
+    SSL_VERIFY: bool = True
     
     # Server
     API_HOST: str = "0.0.0.0"
