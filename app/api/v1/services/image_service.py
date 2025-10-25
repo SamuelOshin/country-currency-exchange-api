@@ -4,6 +4,9 @@ from datetime import datetime
 from typing import List
 from app.core.config import settings
 from app.api.v1.models.country import Country
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ImageService:
     """Service for generating summary images"""
@@ -12,8 +15,23 @@ class ImageService:
     
     @staticmethod
     def get_image_path() -> str:
-        """Get full path to summary image"""
-        return os.path.join(settings.cache_path, ImageService.IMAGE_FILENAME)
+        """
+        Get full path to summary image
+        
+        Checks both configured cache path and /tmp/cache fallback
+        """
+        # Try configured cache path first
+        primary_path = os.path.join(settings.cache_path, ImageService.IMAGE_FILENAME)
+        if os.path.exists(primary_path):
+            return primary_path
+        
+        # Check fallback /tmp/cache
+        fallback_path = os.path.join("/tmp/cache", ImageService.IMAGE_FILENAME)
+        if os.path.exists(fallback_path):
+            return fallback_path
+        
+        # Return primary path as default (for image creation)
+        return primary_path
     
     @staticmethod
     def image_exists() -> bool:
@@ -96,8 +114,23 @@ class ImageService:
             draw.text((70, y_pos), text, fill=text_color, font=body_font)
             y_pos += 35
         
+        # Ensure cache directory exists before saving
+        try:
+            cache_dir = settings.cache_path
+            if not os.path.exists(cache_dir):
+                logger.info(f"Creating cache directory: {cache_dir}")
+                os.makedirs(cache_dir, exist_ok=True)
+        except OSError as e:
+            logger.error(f"Failed to create cache directory {cache_dir}: {e}")
+            # Try fallback to /tmp/cache
+            cache_dir = "/tmp/cache"
+            logger.info(f"Using fallback cache directory: {cache_dir}")
+            os.makedirs(cache_dir, exist_ok=True)
+        
         # Save image
-        image_path = ImageService.get_image_path()
+        image_path = os.path.join(cache_dir, ImageService.IMAGE_FILENAME)
+        logger.info(f"Saving summary image to: {image_path}")
         image.save(image_path)
+        logger.info(f"Successfully saved summary image")
         
         return image_path

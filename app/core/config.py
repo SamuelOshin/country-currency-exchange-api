@@ -29,10 +29,23 @@ class Settings(BaseSettings):
 
     @property
     def cache_path(self) -> str:
-        """Get absolute cache directory path"""
+        """
+        Get absolute cache directory path
+        
+        In production environments (e.g., Leapcell, Docker), use /tmp
+        since the main filesystem is often read-only
+        """
+        # Use /tmp in production for read-only file systems
+        if self.ENVIRONMENT == "production":
+            return "/tmp/cache"
         return os.path.abspath(self.CACHE_DIR)
 
 settings = Settings()
 
-# Ensure cache directory exists
-os.makedirs(settings.cache_path, exist_ok=True)
+# Ensure cache directory exists (with error handling for read-only fs)
+try:
+    os.makedirs(settings.cache_path, exist_ok=True)
+except OSError as e:
+    # If cache directory creation fails, try /tmp as fallback
+    if not os.path.exists("/tmp/cache"):
+        os.makedirs("/tmp/cache", exist_ok=True)
