@@ -1,10 +1,9 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from app.core.dependencies import get_db
 from app.api.v1.services.country_service import CountryService
 from app.api.v1.schemas.country import CountryResponse
-from app.utils.exceptions import CountryNotFoundException
 
 router = APIRouter()
 
@@ -49,11 +48,8 @@ def get_country(
     - GET /countries/Nigeria
     """
     service = CountryService(db)
-    try:
-        country = service.get_country_by_name(name)
-        return country
-    except CountryNotFoundException:
-        raise HTTPException(status_code=404, detail={"error": "Country not found"})
+    country = service.get_country_by_name(name)
+    return country
 
 @router.delete("/countries/{name}")
 def delete_country(
@@ -67,8 +63,5 @@ def delete_country(
     - DELETE /countries/Nigeria
     """
     service = CountryService(db)
-    try:
-        service.delete_country(name)
-        return {"message": f"Country '{name}' deleted successfully"}
-    except CountryNotFoundException:
-        raise HTTPException(status_code=404, detail={"error": "Country not found"})
+    service.delete_country(name)
+    return {"message": f"Country '{name}' deleted successfully"}

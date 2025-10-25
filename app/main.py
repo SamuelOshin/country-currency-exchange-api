@@ -4,7 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import router as v1_router
 from app.core.database import engine, Base
 from app.core.config import settings
-from app.utils.exceptions import CountryNotFoundException, ExternalAPIException, ValidationException
+from app.utils.exceptions import (
+    CountryNotFoundException, 
+    ExternalAPIException, 
+    ValidationException,
+    ImageNotFoundException
+)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -36,6 +41,13 @@ async def country_not_found_handler(request: Request, exc: CountryNotFoundExcept
     return JSONResponse(
         status_code=404,
         content={"error": "Country not found"}
+    )
+
+@app.exception_handler(ImageNotFoundException)
+async def image_not_found_handler(request: Request, exc: ImageNotFoundException):
+    return JSONResponse(
+        status_code=404,
+        content={"error": "Summary image not found"}
     )
 
 @app.exception_handler(ValidationException)

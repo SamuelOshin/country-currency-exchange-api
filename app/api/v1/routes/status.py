@@ -1,31 +1,26 @@
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
-from app.api.v1.services.image_service import ImageService
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from app.core.dependencies import get_db
+from app.api.v1.services.country_service import CountryService
+from app.api.v1.schemas.status import StatusResponse
 
 router = APIRouter()
 
-@router.get("/countries/image")
-def get_summary_image():
+@router.get("/status", response_model=StatusResponse)
+def get_status(
+    db: Session = Depends(get_db)
+):
     """
-    Serve the generated summary image showing:
-    - Total number of countries
-    - Top 5 countries by estimated GDP
-    - Timestamp of last refresh
+    Get database status showing:
+    - total_countries: Total number of countries in the database
+    - last_refreshed_at: Timestamp of last refresh
     
-    The image is generated during POST /countries/refresh
-    
-    Returns: PNG image file
-    Raises: 404 if image doesn't exist
+    Example Response:
+    {
+        "total_countries": 250,
+        "last_refreshed_at": "2025-10-22T18:00:00Z"
+    }
     """
-    if not ImageService.image_exists():
-        raise HTTPException(
-            status_code=404,
-            detail={"error": "Summary image not found"}
-        )
-    
-    image_path = ImageService.get_image_path()
-    return FileResponse(
-        image_path,
-        media_type="image/png",
-        filename="summary.png"
-    )
+    service = CountryService(db)
+    status = service.get_status()
+    return status

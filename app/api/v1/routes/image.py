@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from app.api.v1.services.image_service import ImageService
+from app.utils.exceptions import ImageNotFoundException
 
 router = APIRouter()
 
@@ -18,10 +19,7 @@ def get_summary_image():
     Raises: 404 if image doesn't exist
     """
     if not ImageService.image_exists():
-        raise HTTPException(
-            status_code=404,
-            detail={"error": "Summary image not found"}
-        )
+        raise ImageNotFoundException("Summary image not found")
     
     image_path = ImageService.get_image_path()
     return FileResponse(

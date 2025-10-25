@@ -15,3 +15,7 @@ class ValidationException(Exception):
         self.message = message
         self.details = details or {}
         super().__init__(self.message)
+
+class ImageNotFoundException(Exception):
+    """Raised when summary image is not found"""
+    pass

@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.api.v1.services.refresh_service import RefreshService
-from app.utils.exceptions import ExternalAPIException
 
 router = APIRouter()
 
@@ -26,22 +25,11 @@ async def refresh_countries(
     - countries_processed: Number of countries processed
     - total_countries: Total countries in database
     - last_refreshed_at: Timestamp of refresh
+    
+    Raises:
+    - 503: External API unavailable
+    - 500: Internal server error
     """
     service = RefreshService(db)
-    
-    try:
-        result = await service.refresh_countries()
-        return result
-    except ExternalAPIException as e:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "External data source unavailable",
-                "details": f"Could not fetch data from {e.api_name}"
-            }
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail={"error": "Internal server error"}
-        )
+    result = await service.refresh_countries()
+    return result
