@@ -94,15 +94,49 @@ class CountryRepository(BaseRepository[Country]):
     
     def bulk_upsert(self, countries_data: List[dict]) -> int:
         """
-        Bulk upsert countries
+        Bulk upsert countries with optimized batch processing
+        
+        Uses bulk operations for better performance:
+        1. Get all existing country names from database
+        2. Separate data into updates and inserts
+        3. Perform bulk update and bulk insert
         
         Returns: Number of countries processed
         """
-        count = 0
+        if not countries_data:
+            return 0
+        
+        # Get all existing country names (case-insensitive lookup dict)
+        existing_countries = self.db.query(Country).all()
+        existing_dict = {country.name.lower(): country for country in existing_countries}
+        
+        updates = []
+        inserts = []
+        
+        # Separate into updates and inserts
         for country_data in countries_data:
-            self.upsert_country(country_data)
-            count += 1
-        return count
+            name_lower = country_data["name"].lower()
+            
+            if name_lower in existing_dict:
+                # Update existing country
+                country = existing_dict[name_lower]
+                for key, value in country_data.items():
+                    if key != "id":
+                        setattr(country, key, value)
+                updates.append(country)
+            else:
+                # Prepare for insert
+                inserts.append(Country(**country_data))
+        
+        # Bulk insert new countries
+        if inserts:
+            self.db.bulk_save_objects(inserts)
+        
+        # Updates are already tracked by SQLAlchemy session
+        # Just commit everything
+        self.db.commit()
+        
+        return len(countries_data)
     
     def delete_by_name(self, name: str) -> bool:
         """
