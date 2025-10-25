@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     SSL_VERIFY: bool = True
     
     # Server
-    API_HOST: str = "0.0.0.0"
-    API_PORT: int = 8000
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
     
     # External APIs
     RESTCOUNTRIES_API_URL: str
