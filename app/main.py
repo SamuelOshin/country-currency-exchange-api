@@ -41,7 +41,7 @@ app.add_middleware(
 )
 
 # Include v1 router
-app.include_router(v1_router.router, prefix="/api/v1")
+app.include_router(v1_router.router)
 
 # Global exception handlers
 @app.exception_handler(CountryNotFoundException)
