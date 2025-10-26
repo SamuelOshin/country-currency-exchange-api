@@ -1,9 +1,13 @@
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, asc
+from sqlalchemy import func, desc, asc, text
 from app.api.v1.models.country import Country
 from app.api.v1.repositories.base import BaseRepository
 from app.utils.helpers import normalize_country_name
+from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CountryRepository(BaseRepository[Country]):
     """Repository for Country model with specific operations"""
@@ -49,9 +53,17 @@ class CountryRepository(BaseRepository[Country]):
         # Apply sorting
         if sort_by:
             if sort_by == "gdp_desc":
-                query = query.order_by(desc(Country.estimated_gdp))
+                # Put NULL values last when sorting descending
+                query = query.order_by(
+                    Country.estimated_gdp.is_(None),
+                    desc(Country.estimated_gdp)
+                )
             elif sort_by == "gdp_asc":
-                query = query.order_by(asc(Country.estimated_gdp))
+                # Put NULL values last when sorting ascending
+                query = query.order_by(
+                    Country.estimated_gdp.is_(None),
+                    asc(Country.estimated_gdp)
+                )
             elif sort_by == "name_asc":
                 query = query.order_by(asc(Country.name))
             elif sort_by == "name_desc":
@@ -94,47 +106,77 @@ class CountryRepository(BaseRepository[Country]):
     
     def bulk_upsert(self, countries_data: List[dict]) -> int:
         """
-        Bulk upsert countries with optimized batch processing
+        Bulk upsert countries with optimized batch processing using MySQL's ON DUPLICATE KEY UPDATE
         
-        Uses bulk operations for better performance:
-        1. Get all existing country names from database
-        2. Separate data into updates and inserts
-        3. Perform bulk update and bulk insert
+        This is the fastest approach for MySQL - uses a single INSERT statement with ON DUPLICATE KEY UPDATE
+        which handles both inserts and updates in one query per batch.
         
         Returns: Number of countries processed
         """
         if not countries_data:
             return 0
         
-        # Get all existing country names (case-insensitive lookup dict)
-        existing_countries = self.db.query(Country).all()
-        existing_dict = {country.name.lower(): country for country in existing_countries}
+        import time
+        start_time = time.time()
         
-        updates = []
-        inserts = []
+        # Current timestamp for last_refreshed_at
+        now = datetime.utcnow()
         
-        # Separate into updates and inserts
+        logger.info(f"Bulk upserting {len(countries_data)} countries using ON DUPLICATE KEY UPDATE")
+        
+        # Build values for bulk INSERT ... ON DUPLICATE KEY UPDATE
+        values_list = []
         for country_data in countries_data:
-            name_lower = country_data["name"].lower()
+            # Escape single quotes
+            name = country_data['name'].replace("'", "''")
+            capital = country_data.get('capital', '').replace("'", "''") if country_data.get('capital') else ''
+            region = country_data.get('region', '').replace("'", "''") if country_data.get('region') else ''
+            flag_url = country_data.get('flag_url', '').replace("'", "''") if country_data.get('flag_url') else ''
+            currency_code = country_data.get('currency_code', '')
+            exchange_rate = country_data.get('exchange_rate')
+            estimated_gdp = country_data.get('estimated_gdp')
+            population = country_data.get('population', 0)
             
-            if name_lower in existing_dict:
-                # Update existing country
-                country = existing_dict[name_lower]
-                for key, value in country_data.items():
-                    if key != "id":
-                        setattr(country, key, value)
-                updates.append(country)
-            else:
-                # Prepare for insert
-                inserts.append(Country(**country_data))
+            value = (
+                f"('{name}', '{capital}', '{region}', {population}, "
+                f"'{currency_code if currency_code else ''}', "
+                f"{exchange_rate if exchange_rate is not None else 'NULL'}, "
+                f"{estimated_gdp if estimated_gdp is not None else 'NULL'}, "
+                f"'{flag_url}', '{now.strftime('%Y-%m-%d %H:%M:%S')}')"
+            )
+            values_list.append(value)
         
-        # Bulk insert new countries
-        if inserts:
-            self.db.bulk_save_objects(inserts)
+        # Process in batches to avoid hitting MySQL packet size limits
+        batch_size = 100
+        for i in range(0, len(values_list), batch_size):
+            batch = values_list[i:i + batch_size]
+            values_str = ", ".join(batch)
+            
+            # Single INSERT ... ON DUPLICATE KEY UPDATE statement
+            upsert_sql = f"""
+            INSERT INTO countries (name, capital, region, population, currency_code, exchange_rate, estimated_gdp, flag_url, last_refreshed_at)
+            VALUES {values_str}
+            ON DUPLICATE KEY UPDATE
+                capital = VALUES(capital),
+                region = VALUES(region),
+                population = VALUES(population),
+                currency_code = VALUES(currency_code),
+                exchange_rate = VALUES(exchange_rate),
+                estimated_gdp = VALUES(estimated_gdp),
+                flag_url = VALUES(flag_url),
+                last_refreshed_at = VALUES(last_refreshed_at)
+            """
+            
+            self.db.execute(text(upsert_sql))
         
-        # Updates are already tracked by SQLAlchemy session
-        # Just commit everything
+        # Commit everything at once
+        logger.info("Committing transaction")
+        t5 = time.time()
         self.db.commit()
+        logger.info(f"Commit completed in {time.time()-t5:.2f}s")
+        
+        total_time = time.time() - start_time
+        logger.info(f"Total bulk_upsert time: {total_time:.2f}s for {len(countries_data)} countries")
         
         return len(countries_data)
     

@@ -7,6 +7,10 @@ from app.api.v1.services.country_service import CountryService
 from app.api.v1.repositories.country_repository import CountryRepository
 from app.utils.helpers import calculate_gdp
 from app.utils.exceptions import ExternalAPIException
+import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 class RefreshService:
     """Service for orchestrating data refresh from external APIs"""
@@ -30,22 +34,33 @@ class RefreshService:
         Raises: ExternalAPIException if external APIs fail
         """
         try:
-            # Fetch data from external APIs
-            countries_data = await self.external_api.fetch_countries()
-            exchange_rates = await self.external_api.fetch_exchange_rates()
+            logger.info("Starting country refresh process")
+            
+            # Fetch data from external APIs in parallel
+            logger.info("Fetching data from external APIs")
+            countries_data, exchange_rates = await asyncio.gather(
+                self.external_api.fetch_countries(),
+                self.external_api.fetch_exchange_rates()
+            )
+            logger.info(f"Fetched {len(countries_data)} countries and {len(exchange_rates)} exchange rates")
             
             # Process countries
+            logger.info("Processing country data")
             processed_countries = self._process_countries(countries_data, exchange_rates)
             
             # Bulk upsert to database
+            logger.info(f"Upserting {len(processed_countries)} countries to database")
             count = self.repository.bulk_upsert(processed_countries)
+            logger.info(f"Successfully upserted {count} countries")
             
-            # Generate summary image
+            # Generate summary image (in background)
+            logger.info("Generating summary image")
             await self._generate_summary_image()
             
             # Get status
             status = self.country_service.get_status()
             
+            logger.info("Refresh completed successfully")
             return {
                 "message": "Countries refreshed successfully",
                 "countries_processed": count,
@@ -55,9 +70,11 @@ class RefreshService:
             
         except ExternalAPIException:
             # Re-raise external API exceptions
+            logger.error("External API exception during refresh")
             raise
         except Exception as e:
             # Wrap other exceptions
+            logger.error(f"Error during refresh: {str(e)}", exc_info=True)
             raise ExternalAPIException(
                 f"Error during refresh: {str(e)}",
                 api_name="refresh_service"
@@ -139,12 +156,21 @@ class RefreshService:
         }
     
     async def _generate_summary_image(self):
-        """Generate summary image after refresh"""
-        status = self.country_service.get_status()
-        top_countries = self.country_service.get_top_countries_by_gdp(limit=5)
-        
-        ImageService.generate_summary_image(
-            total_countries=status["total_countries"],
-            top_countries=top_countries,
-            last_refreshed=status["last_refreshed_at"]
-        )
+        """Generate summary image after refresh (runs in thread pool to avoid blocking)"""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._generate_image_sync)
+    
+    def _generate_image_sync(self):
+        """Synchronous image generation (called from thread pool)"""
+        try:
+            status = self.country_service.get_status()
+            top_countries = self.country_service.get_top_countries_by_gdp(limit=5)
+            
+            ImageService.generate_summary_image(
+                total_countries=status["total_countries"],
+                top_countries=top_countries,
+                last_refreshed=status["last_refreshed_at"]
+            )
+        except Exception as e:
+            logger.error(f"Error generating summary image: {e}", exc_info=True)
+            # Don't fail the entire refresh if image generation fails

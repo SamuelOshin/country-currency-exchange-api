@@ -14,7 +14,7 @@ class Country(Base):
     exchange_rate = Column(DECIMAL(15, 6), nullable=True)
     estimated_gdp = Column(DECIMAL(20, 2), nullable=True)
     flag_url = Column(Text, nullable=True)
-    last_refreshed_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    last_refreshed_at = Column(TIMESTAMP, server_default=func.now())
     
     # Additional indexes for performance
     __table_args__ = (
