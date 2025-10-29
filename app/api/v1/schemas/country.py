@@ -9,8 +9,8 @@ class CountryBase(BaseModel):
     region: Optional[str] = None
     population: int
     currency_code: Optional[str] = None
-    exchange_rate: Optional[Decimal] = None
-    estimated_gdp: Optional[Decimal] = None
+    exchange_rate: Optional[float] = None
+    estimated_gdp: Optional[float] = None
     flag_url: Optional[str] = None
 
 class CountryResponse(CountryBase):
