@@ -53,17 +53,13 @@ class CountryRepository(BaseRepository[Country]):
         # Apply sorting
         if sort_by:
             if sort_by == "gdp_desc":
-                # Put NULL values last when sorting descending
-                query = query.order_by(
-                    Country.estimated_gdp.is_(None),
-                    desc(Country.estimated_gdp)
-                )
+                # Sort by GDP descending, excluding NULL values or putting them last
+                query = query.filter(Country.estimated_gdp.isnot(None))
+                query = query.order_by(desc(Country.estimated_gdp))
             elif sort_by == "gdp_asc":
-                # Put NULL values last when sorting ascending
-                query = query.order_by(
-                    Country.estimated_gdp.is_(None),
-                    asc(Country.estimated_gdp)
-                )
+                # Sort by GDP ascending, excluding NULL values or putting them last
+                query = query.filter(Country.estimated_gdp.isnot(None))
+                query = query.order_by(asc(Country.estimated_gdp))
             elif sort_by == "name_asc":
                 query = query.order_by(asc(Country.name))
             elif sort_by == "name_desc":
